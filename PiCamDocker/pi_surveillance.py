@@ -15,6 +15,9 @@ import json
 import time
 import cv2
 
+# open text file for storing bounding boxes
+bounding_file = open("bounding_boxes.txt","w")
+
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
 ap.add_argument("-c", "--conf", required=True,
@@ -45,7 +48,7 @@ camera.resolution = tuple(conf["resolution"])
 camera.framerate = conf["fps"]
 camera.shutter_speed = conf["shutter_speed"] # 1/focal length; fl=3.6 mm
 camera.sharpness = conf["sharpness"] # 50-100 recommended
-camera.image_denoise = conf["image_effect"]
+camera.image_denoise = conf["image_denoise"]
 rawCapture = PiRGBArray(camera, size=tuple(conf["resolution"]))
 
 # allow the camera to warmup, then initialize the average frame, last
@@ -55,6 +58,7 @@ time.sleep(conf["camera_warmup_time"])
 avg = None
 lastUploaded = datetime.datetime.now()
 motionCounter = 0
+
 
 # capture frames from the camera
 for f in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
@@ -88,7 +92,7 @@ for f in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True
 	thresh = cv2.dilate(thresh, None, iterations=2)
 	(cnts, _) = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,
 		cv2.CHAIN_APPROX_SIMPLE)
-
+        
 	# loop over the contours
 	for c in cnts:
 		# if the contour is too small, ignore it
@@ -101,12 +105,12 @@ for f in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True
 		cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 		text = "Occupied"
 
-	frame=imutils.rotate(frame,angle=90) # Rotate camera
+        #frame=imutils.rotate(frame,angle=90) # Rotate camera
 	ts = timestamp.strftime("%A %d %B %Y %I:%M:%S%p") # draw the text and timestamp on the frame
-	cv2.putText(frame, "Room Status: {}".format(text), (10, 20),
-		cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-	cv2.putText(frame, ts, (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX,
-		0.35, (0, 0, 255), 1)
+	#cv2.putText(frame, "Room Status: {}".format(text), (10, 20),
+		#cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+	#cv2.putText(frame, ts, (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX,
+		#0.35, (0, 0, 255), 1)
 
 	# check to see if the room is occupied
 	if text == "Occupied":
@@ -134,6 +138,13 @@ for f in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True
 				else:
                                         path = "{base_path}/{timestamp}.jpeg".format(base_path=conf["file_base_path"], timestamp=ts)
                                         cv2.imwrite(path, frame)
+                                        fileName = path[42:]
+                                        w = w + x
+                                        h = y + h
+                                        bounding_coordinates = [x,y,w,h]
+                                        bounding_info = [fileName,bounding_coordinates]
+                                        bounding_file.write(str(bounding_info))
+                                        bounding_file.write("\n")
 
 				# update the last uploaded timestamp and reset the motion
 				# counter
@@ -156,3 +167,4 @@ for f in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True
 
 	# clear the stream in preparation for the next frame
 	rawCapture.truncate(0)
+bounding_file.close()
